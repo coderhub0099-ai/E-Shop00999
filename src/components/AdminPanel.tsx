@@ -102,6 +102,41 @@ export const AdminPanel: React.FC = () => {
   const [newCatName, setNewCatName] = useState('');
   const [newCatEmoji, setNewCatEmoji] = useState('🍊');
 
+  // --- SUBSTATES FOR INJECTING CUSTOM REVIEW ---
+  const [newReviewProdId, setNewReviewProdId] = useState('');
+  const [newReviewAuthor, setNewReviewAuthor] = useState('');
+  const [newReviewRating, setNewReviewRating] = useState(5);
+  const [newReviewComment, setNewReviewComment] = useState('');
+
+  // --- CUSTOM ROBUST CONFIRM STATE INSTEAD OF BLOCKED WINDOW.CONFIRM ---
+  const [confirmState, setConfirmState] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void | Promise<void>;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+  });
+
+  const triggerConfirm = (title: string, message: string, onConfirm: () => void | Promise<void>) => {
+    setConfirmState({
+      isOpen: true,
+      title,
+      message,
+      onConfirm: async () => {
+        try {
+          await onConfirm();
+        } catch (err) {
+          console.error("Confirmation execution action failed:", err);
+        }
+        setConfirmState(prev => ({ ...prev, isOpen: false }));
+      }
+    });
+  };
+
   // --- SHIPPING ORDER NUMBER EDITING ---
   const [selectedOrderIdToEdit, setSelectedOrderIdToEdit] = useState<string | null>(null);
   const [tempOrderNumber, setTempOrderNumber] = useState('');
@@ -171,6 +206,9 @@ export const AdminPanel: React.FC = () => {
   const [payStripeKey, setPayStripeKey] = useState(paymentSettings.stripePublicKey ?? '');
   const [payStripeSecret, setPayStripeSecret] = useState(paymentSettings.stripeSecretKey ?? '');
   const [payStripeSandbox, setPayStripeSandbox] = useState(paymentSettings.stripeSandboxMode ?? false);
+
+  const [payBkashAuto, setPayBkashAuto] = useState(paymentSettings.bKashAutoEnabled ?? true);
+  const [payNagadAuto, setPayNagadAuto] = useState(paymentSettings.nagadAutoEnabled ?? true);
 
   const [paySsl, setPaySsl] = useState(paymentSettings.sslCommerzEnabled ?? false);
   const [paySslStoreId, setPaySslStoreId] = useState(paymentSettings.sslCommerzStoreId ?? '');
@@ -275,10 +313,14 @@ export const AdminPanel: React.FC = () => {
   };
 
   const handleDeleteProduct = async (id: string, name: string) => {
-    if (confirm(`Do you want to permanently delete "${name}" from listings?`)) {
-      await deleteProduct(id);
-      toast.info(`Deleted ${name} listings.`);
-    }
+    triggerConfirm(
+      'Permanent Product Deletion',
+      `Are you absolutely sure you want to permanently delete "${name}" from listings? This listing will be immediately wiped from the store catalog.`,
+      async () => {
+        await deleteProduct(id);
+        toast.info(`Deleted "${name}" listings.`);
+      }
+    );
   };
 
   // --- CRUD: QUICK CATEGORY SAVE ---
@@ -302,10 +344,14 @@ export const AdminPanel: React.FC = () => {
   };
 
   const handleDeleteCategory = async (id: string, name: string) => {
-    if (confirm(`Delete category "${name}"? Products mapped to this won't change but check your configurations.`)) {
-      await deleteCategory(id);
-      toast.info(`Deleted ${name} category mappings.`);
-    }
+    triggerConfirm(
+      'Category Deletion Warning',
+      `Delete category "${name}"? Products mapped to this won't change but the navigation filter option will be removed.`,
+      async () => {
+        await deleteCategory(id);
+        toast.info(`Deleted "${name}" category mappings.`);
+      }
+    );
   };
 
   // --- CRUD: COUPONS ---
@@ -424,6 +470,8 @@ export const AdminPanel: React.FC = () => {
         stripePublicKey: payStripeKey,
         stripeSecretKey: payStripeSecret,
         stripeSandboxMode: payStripeSandbox,
+        bKashAutoEnabled: payBkashAuto,
+        nagadAutoEnabled: payNagadAuto,
         sslCommerzEnabled: paySsl,
         sslCommerzStoreId: paySslStoreId,
         sslCommerzStorePassword: paySslStorePass,
@@ -533,6 +581,36 @@ export const AdminPanel: React.FC = () => {
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-800 pb-16 flex flex-col">
       
+      {/* CMS CONFIRM MODAL OVERLAY */}
+      {confirmState.isOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs select-none">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-6 border border-slate-200 shadow-2xl">
+            <h3 className="font-extrabold text-base text-slate-800 uppercase tracking-tight mb-2 flex items-center gap-1.5">
+              <span>🚨</span> {confirmState.title}
+            </h3>
+            <p className="text-xs text-slate-450 mb-6 font-medium leading-relaxed">
+              {confirmState.message}
+            </p>
+            <div className="flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setConfirmState(prev => ({ ...prev, isOpen: false }))}
+                className="px-4 py-2 cursor-pointer bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold uppercase tracking-wide transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmState.onConfirm}
+                className="px-4 py-2 cursor-pointer bg-rose-605 hover:bg-rose-700 text-white rounded-xl text-xs font-bold uppercase tracking-wide shadow-md shadow-rose-200 transition-all font-sans"
+              >
+                Confirm Action
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* CMS Header navigation */}
       <header className="bg-white border-b border-slate-200 px-6 py-4 flex flex-col sm:flex-row gap-4 items-center justify-between select-none shadow-sm">
         <div className="flex items-center gap-3">
@@ -791,7 +869,7 @@ export const AdminPanel: React.FC = () => {
                   <input
                     type="text"
                     required
-                    maxLength={1}
+                    maxLength={8}
                     placeholder="🍕"
                     value={newCatEmoji}
                     onChange={(e) => setNewCatEmoji(e.target.value)}
@@ -994,11 +1072,15 @@ export const AdminPanel: React.FC = () => {
                           </select>
 
                           <button
-                            onClick={async () => {
-                              if (confirm('Delete order row permanently?')) {
-                                await deleteOrder(o.id);
-                                toast.info('Order destroyed.');
-                              }
+                            onClick={() => {
+                              triggerConfirm(
+                                'Destroy Order Registry',
+                                `This will permanently delete the invoice record of Order #${o.orderNumber} for ${o.customerName}. This action is irreversible.`,
+                                async () => {
+                                  await deleteOrder(o.id);
+                                  toast.info(`Order #${o.orderNumber} record destroyed.`);
+                                }
+                              );
                             }}
                             className="p-1.5 hover:text-rose-605 border border-slate-200 rounded-md cursor-pointer ml-2 bg-slate-50 text-slate-400 hover:border-rose-150"
                             title="Purge transaction history row"
@@ -1141,11 +1223,15 @@ export const AdminPanel: React.FC = () => {
                       </div>
 
                       <button
-                        onClick={async () => {
-                          if (confirm(`Remove custom coupon "${c.code}"?`)) {
-                            await deleteCoupon(c.id);
-                            toast.info(`Purged coupon ${c.code}.`);
-                          }
+                        onClick={() => {
+                          triggerConfirm(
+                            'Purge Promo Coupon',
+                            `Are you sure you want to disable and delete the discount coupon code "${c.code}" immediately? Users will no longer be able to use it at checkout.`,
+                            async () => {
+                              await deleteCoupon(c.id);
+                              toast.info(`Purged coupon "${c.code}".`);
+                            }
+                          );
                         }}
                         className="p-2 border border-rose-300 hover:bg-rose-100 rounded-xl cursor-pointer text-rose-700"
                         title="Delete promo parameter row"
@@ -1162,9 +1248,132 @@ export const AdminPanel: React.FC = () => {
           {/* TAB 4: REVIEWS MODERATION LIST */}
           {activeTab === 'reviews' && (
             <div className="space-y-6">
-              <div>
-                <h3 className="text-lg font-bold text-slate-800 uppercase">Product Star Rating Reviews Moderation</h3>
-                <p className="text-xs text-slate-450 font-medium">Verify submissions, approve content, or reject comments.</p>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b pb-4 border-slate-200">
+                <div>
+                  <h3 className="text-lg font-bold text-slate-800 uppercase">Product Star Rating Reviews Moderation</h3>
+                  <p className="text-xs text-slate-450 font-medium">Verify submissions, approve content, or reject comments.</p>
+                </div>
+                {reviews.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      triggerConfirm(
+                        'Purge Absolutely All Reviews',
+                        'WARNING: This will instantly delete and wipe every single review comment on your website database! This action is irreversible.',
+                        async () => {
+                          for (const r of reviews) {
+                            await deleteReview(r.id);
+                          }
+                          toast.success('💥 Boom! Purged all review data entries.');
+                        }
+                      );
+                    }}
+                    className="px-3.5 py-2 cursor-pointer bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold uppercase tracking-wide shadow-2xs transition-all self-end sm:self-auto"
+                  >
+                    💥 Purge All Reviews
+                  </button>
+                )}
+              </div>
+
+              {/* NEW SUB-PANEL: ADD CUSTOM REVIEW */}
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-4 shadow-3xs">
+                <div className="flex items-center justify-between border-b pb-2 border-slate-200">
+                  <h4 className="text-xs font-extrabold uppercase text-slate-700 flex items-center gap-1.5">
+                    <span>✍️</span> Create & Inject Custom Review
+                  </h4>
+                  <span className="text-[9px] bg-slate-900 text-white rounded px-2 py-0.5 font-bold uppercase">Admin Verified</span>
+                </div>
+                
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    if (!newReviewProdId) {
+                      toast.error("Please select a target product!");
+                      return;
+                    }
+                    if (!newReviewAuthor.trim()) {
+                      toast.error("Please supply a reviewer name!");
+                      return;
+                    }
+                    if (!newReviewComment.trim()) {
+                      toast.error("Please supply review comment text!");
+                      return;
+                    }
+                    try {
+                      await addReview(newReviewProdId, newReviewAuthor.trim(), newReviewRating, newReviewComment.trim());
+                      toast.success(`🎉 Review successfully added and live instantly!`);
+                      setNewReviewAuthor('');
+                      setNewReviewComment('');
+                    } catch (err) {
+                      toast.error("Failure writing target review comment.");
+                    }
+                  }}
+                  className="space-y-4"
+                >
+                  <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+                    <div className="md:col-span-5">
+                      <label className="block text-[9px] font-extrabold uppercase text-slate-500 mb-1">Target Product Listing *</label>
+                      <select
+                        required
+                        value={newReviewProdId}
+                        onChange={(e) => setNewReviewProdId(e.target.value)}
+                        className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-800 focus:ring-1 focus:ring-emerald-500 outline-none cursor-pointer"
+                      >
+                        <option value="">-- SELECT PRODUCT CATALOG ITEM --</option>
+                        {products.map(p => (
+                          <option key={p.id} value={p.id}>{p.image} {p.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="md:col-span-4">
+                      <label className="block text-[9px] font-extrabold uppercase text-slate-500 mb-1">Reviewer Name *</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. Maria S."
+                        value={newReviewAuthor}
+                        onChange={(e) => setNewReviewAuthor(e.target.value)}
+                        className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 outline-none font-medium focus:ring-1 focus:ring-emerald-400"
+                      />
+                    </div>
+
+                    <div className="md:col-span-3">
+                      <label className="block text-[9px] font-extrabold uppercase text-slate-500 mb-1">Star Score *</label>
+                      <select
+                        value={newReviewRating}
+                        onChange={(e) => setNewReviewRating(Number(e.target.value))}
+                        className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-850 focus:ring-1 focus:ring-emerald-400 outline-none cursor-pointer"
+                      >
+                        <option value={5}>⭐⭐⭐⭐⭐ (5 Stars)</option>
+                        <option value={4}>⭐⭐⭐⭐ (4 Stars)</option>
+                        <option value={3}>⭐⭐⭐ (3 Stars)</option>
+                        <option value={2}>⭐⭐ (2 Stars)</option>
+                        <option value={1}>⭐ (1 Star)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[9px] font-extrabold uppercase text-slate-500 mb-1">Reviewer Comment Text *</label>
+                    <textarea
+                      required
+                      placeholder="Organic, fresh, highly recommended! Quick shipping and incredibly rich texture."
+                      value={newReviewComment}
+                      onChange={(e) => setNewReviewComment(e.target.value)}
+                      className="w-full bg-white border border-slate-205 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 focus:ring-1 focus:ring-emerald-400 outline-none h-16"
+                    />
+                  </div>
+
+                  <div className="flex justify-end pt-1">
+                    <button
+                      type="submit"
+                      className="cursor-pointer bg-slate-900 hover:bg-slate-950 border border-transparent px-5 py-2 text-white text-xs font-sans font-extrabold uppercase tracking-wide rounded-lg shadow-xs transition-colors"
+                    >
+                      + Inject & Approve Review
+                    </button>
+                  </div>
+                </form>
               </div>
 
               {reviews.length === 0 ? (
@@ -1218,11 +1427,15 @@ export const AdminPanel: React.FC = () => {
                             </button>
                           )}
                           <button
-                            onClick={async () => {
-                              if (confirm('Bin review comments permanently?')) {
-                                await deleteReview(r.id);
-                                toast.info('Destroyed review comment.');
-                              }
+                            onClick={() => {
+                              triggerConfirm(
+                                'Purge Review Rating Comment',
+                                `Are you sure you want to permanently delete the review comment from "${r.reviewerName}"? This action will immediately adjust product star counts.`,
+                                async () => {
+                                  await deleteReview(r.id);
+                                  toast.info('Destroyed review comment.');
+                                }
+                              );
                             }}
                             className="px-3 py-1.5 hover:bg-rose-50 border border-rose-200 rounded-lg text-rose-600 text-[10px] uppercase font-semibold transition-colors"
                             title="Delete comment rating"
@@ -1274,11 +1487,15 @@ export const AdminPanel: React.FC = () => {
                             <td className="p-3 font-semibold text-slate-400">{new Date(item.subscribedAt).toLocaleString()}</td>
                             <td className="p-3 text-right">
                               <button
-                                onClick={async () => {
-                                  if (confirm(`Remove subscriber "${item.email}"?`)) {
-                                    await deleteSubscriber(item.id);
-                                    toast.info(`Emailed subscriber wiped from database.`);
-                                  }
+                                onClick={() => {
+                                  triggerConfirm(
+                                    'Remove Subscriber Record',
+                                    `Are you sure you want to permanently remove the subscriber "${item.email}" from your email marketing database index?`,
+                                    async () => {
+                                      await deleteSubscriber(item.id);
+                                      toast.info(`Subscriber "${item.email}" wiped from marketing database.`);
+                                    }
+                                  );
                                 }}
                                 className="p-1.5 text-slate-400 hover:text-rose-600 rounded cursor-pointer transition-colors"
                               >
@@ -2020,6 +2237,56 @@ export const AdminPanel: React.FC = () => {
                             />
                           </div>
                         </div>
+                      )}
+                    </div>
+
+                    {/* GATEWAY 4: AUTOMATIC BKASH PORTAL */}
+                    <div className="space-y-3.5 border-t pt-4 border-slate-200">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            id="pay-bkash-auto-en"
+                            checked={payBkashAuto}
+                            onChange={(e) => setPayBkashAuto(e.target.checked)}
+                            className="scale-110 accent-pink-600 rounded cursor-pointer"
+                          />
+                          <label htmlFor="pay-bkash-auto-en" className="text-xs font-bold uppercase cursor-pointer text-slate-700 flex items-center gap-1.5">
+                            <span className="text-pink-600 text-sm">৳</span> bKash Automatic API Gateway
+                          </label>
+                        </div>
+                        <span className="text-[8px] bg-pink-50 border border-pink-200 text-pink-700 rounded px-1.5 py-0.5 font-bold uppercase">Dynamic Checkout</span>
+                      </div>
+                      
+                      {payBkashAuto && (
+                        <p className="text-[10px] text-slate-450 font-medium italic">
+                          ℹ️ Seamless bKash customer merchant portal active with automatic OTP verification and secure balance deductions.
+                        </p>
+                      )}
+                    </div>
+
+                    {/* GATEWAY 5: AUTOMATIC NAGAD PORTAL */}
+                    <div className="space-y-3.5 border-t pt-4 border-slate-200">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            id="pay-nagad-auto-en"
+                            checked={payNagadAuto}
+                            onChange={(e) => setPayNagadAuto(e.target.checked)}
+                            className="scale-110 accent-orange-600 rounded cursor-pointer"
+                          />
+                          <label htmlFor="pay-nagad-auto-en" className="text-xs font-bold uppercase cursor-pointer text-slate-700 flex items-center gap-1.5">
+                            <span className="text-orange-600 text-sm">৳</span> Nagad Automatic API Gateway
+                          </label>
+                        </div>
+                        <span className="text-[8px] bg-orange-50 border border-orange-200 text-orange-700 rounded px-1.5 py-0.5 font-bold uppercase">Instant Settlement</span>
+                      </div>
+                      
+                      {payNagadAuto && (
+                        <p className="text-[10px] text-slate-450 font-medium italic">
+                          ℹ️ Seamless Nagad customer merchant portal active with immediate settlement and automated redirection verification.
+                        </p>
                       )}
                     </div>
                   </div>

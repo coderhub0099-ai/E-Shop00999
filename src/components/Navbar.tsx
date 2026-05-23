@@ -50,8 +50,12 @@ export const Navbar: React.FC<NavbarProps> = ({
           className="flex items-center gap-2.5 group cursor-pointer"
           id="navbar-logo"
         >
-          <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center shadow-xs border border-emerald-100 transform group-hover:scale-105 transition-transform p-0.5">
-            <QuirkyFruityLogo className="w-full h-full" />
+          <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center shadow-xs border border-emerald-100 transform group-hover:scale-105 transition-transform p-1">
+            {siteSettings.logoEmoji && siteSettings.logoEmoji.trim() !== '' ? (
+              <span className="text-2xl select-none leading-none">{siteSettings.logoEmoji}</span>
+            ) : (
+              <QuirkyFruityLogo className="w-full h-full" />
+            )}
           </div>
           <span className="text-xl font-bold tracking-tight text-slate-800 hover:text-emerald-600 transition-colors capitalize">
             {siteSettings.websiteName || 'quirky-fruity'}
